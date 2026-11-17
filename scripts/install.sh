@@ -238,6 +238,23 @@ link_memory() {
   case " $linked_paths " in *" $link_path "*) return 0 ;; esac
   linked_paths="$linked_paths $link_path"
 
+  # A symlink already pointing at a *different* memory directory in the repo
+  # that exists is a deliberate share, not damage: a git worktree of a project
+  # gets its own key, and is linked by hand to the main checkout's memory so
+  # both read and write one set. Repointing it would hand the worktree an empty
+  # directory and silently cut it off from everything already recorded.
+  if [ -L "$link_path" ]; then
+    local cur; cur="$(readlink "$link_path")"
+    case "$cur" in
+      "$REPO_ROOT"/global/memory/*)
+        if [ "$cur" != "$target" ] && [ -d "$cur" ]; then
+          echo "ok:       $link_path (shared with $(basename "$cur"))"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+
   # A memory symlink whose repo directory never existed -- the directory was
   # empty, so git never tracked it -- is left dangling, and every memory write
   # into it fails. Create the directory instead of walking past it.
