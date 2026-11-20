@@ -20,6 +20,7 @@ back later as a setting that does nothing.
 |---|---|---|
 | `workspace_dir` | `.csync` | the directory csync creates inside each project |
 | `auto_title` | `off` | may `open` rename the session |
+| `worktree_dir` | *(empty)* | the directory beside each main checkout that holds its worktrees |
 
 `csync.conf` lives in the sync repo, so a change lands on every machine — **write
 it, then `sync`.** A value left uncommitted is a value the other machine never
@@ -55,6 +56,13 @@ set by hand, without asking. It is a preference, not a capability — the same
 answer on every machine, which is why it is synced — and whether a given host
 *can* rename is probed at the moment `open` needs it, never stored. A stored
 "unavailable" is wrong the next time they open the project from another host.
+
+**`worktree_dir` names where the user keeps worktrees** — `<parent>/<worktree_dir>/`
+next to each main checkout. Claude Code keys memory by path, so a worktree looks
+like a project of its own; with this set, `install.sh` skips every memory key
+under that directory for each root in `~/.claude/csync-projects`, and the links
+there are the user's to wire. Set it only when the user actually keeps worktrees
+in such a directory, then re-run `install.sh` — dry run first.
 
 **The remote is not a key here.** Where the sync repo points is `/csync remote`,
 which mirrors the history, repoints every clone, and runs the privacy gate before

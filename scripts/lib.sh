@@ -110,6 +110,13 @@ csync_workspace() {
   csync_conf "$1" workspace_dir .csync
 }
 
+# The directory, beside each project's main checkout, that holds its git
+# worktrees -- `<parent>/<worktree_dir>/<name>`. Empty (the default) means the
+# user keeps no such directory, and nothing is treated as a worktree.
+csync_worktree_dir() {
+  csync_conf "$1" worktree_dir ""
+}
+
 # Whether `open` may rename the session. Prints a normalised `on` or `off`.
 #
 # Tolerant on read, canonical on write: `config` only ever writes on/off, but a

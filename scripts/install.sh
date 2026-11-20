@@ -230,6 +230,39 @@ local_name() {
   esac
 }
 
+# Worktrees are not projects of their own. Claude Code keys a worktree's memory
+# by its own path, so without this it shows up as one more project: an unlinked
+# memory directory gets adopted into the repo as a stray copy, and a link the
+# user pointed at the main checkout's memory gets examined like any other.
+# With `worktree_dir` set, every key under `<parent>/<worktree_dir>/` of a
+# registered project root is skipped in both directions below -- the user wires
+# those links by hand, and this script leaves them alone. The parents come from
+# the registry because a mangled key cannot be decoded back into a path.
+WT_DIR="$(csync_worktree_dir "$REPO_ROOT")"
+wt_prefixes=""
+if [ -n "$WT_DIR" ] && [ -f "$CSYNC_REGISTRY" ]; then
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    p="$(printf '%s' "$(dirname "$root")/$WT_DIR" | tr '/. ' '---')-"
+    case " $wt_prefixes " in *" $p "*) ;; *) wt_prefixes="$wt_prefixes $p" ;; esac
+  done < "$CSYNC_REGISTRY"
+fi
+is_worktree_key() {
+  local p
+  for p in $wt_prefixes; do
+    case "$1" in "$p"?*) return 0 ;; esac
+  done
+  return 1
+}
+wt_reported=""
+skip_worktree() {
+  is_worktree_key "$1" || return 1
+  case " $wt_reported " in *" $1 "*) return 0 ;; esac
+  wt_reported="$wt_reported $1"
+  echo "skip:     $CLAUDE_DIR/projects/$1 (a worktree under $WT_DIR/ -- not checked)"
+  return 0
+}
+
 # Both directions below walk the same pairs, so each link comes up twice.
 # Report it once -- the plan is something the user has to read.
 linked_paths=""
@@ -238,19 +271,31 @@ link_memory() {
   case " $linked_paths " in *" $link_path "*) return 0 ;; esac
   linked_paths="$linked_paths $link_path"
 
-  # A symlink already pointing at a *different* memory directory in the repo
-  # that exists is a deliberate share, not damage: a git worktree of a project
-  # gets its own key, and is linked by hand to the main checkout's memory so
-  # both read and write one set. Repointing it would hand the worktree an empty
-  # directory and silently cut it off from everything already recorded.
+  # A memory link that already points at a *different* directory of this repo's
+  # global/memory/ was put there on purpose -- typically a git worktree, whose
+  # project key differs from its main checkout's, linked by hand so both share
+  # one memory. The key alone cannot tell a worktree from a project, but the
+  # link can: keep it. Repointing it would hand the worktree an empty directory
+  # of its own and hide every memory it was meant to read. Only a missing
+  # target is repaired, and it is the target the link names that gets created.
   if [ -L "$link_path" ]; then
-    local cur; cur="$(readlink "$link_path")"
-    case "$cur" in
-      "$REPO_ROOT"/global/memory/*)
-        if [ "$cur" != "$target" ] && [ -d "$cur" ]; then
-          echo "ok:       $link_path (shared with $(basename "$cur"))"
-          return 0
-        fi
+    local current
+    current="$(readlink "$link_path")"
+    case "$current" in
+      "$REPO_ROOT/global/memory/"?*)
+        case "${current#"$REPO_ROOT/global/memory/"}" in
+          */*) ;;   # deeper than one level: not a memory directory, fall through
+          *)
+            if [ "$current" != "$target" ]; then
+              if [ ! -e "$current" ]; then
+                echo "create:   $current (repairing a dangling link)"
+                act mkdir -p "$current"
+              fi
+              echo "ok:       $link_path (kept -> $current, shared with another project)"
+              return 0
+            fi
+            ;;
+        esac
         ;;
     esac
   fi
@@ -268,10 +313,12 @@ link_memory() {
 for pdir in "$CLAUDE_DIR"/projects/*/; do
   # -L as well as -d: a dangling symlink is precisely the case needing repair.
   [ -d "$pdir/memory" ] || [ -L "$pdir/memory" ] || continue
+  skip_worktree "$(basename "$pdir")" && continue
   link_memory "$REPO_ROOT/global/memory/$(repo_key "$(basename "$pdir")")" "${pdir%/}/memory"
 done
 for mdir in "$REPO_ROOT"/global/memory/*/; do
   [ -d "$mdir" ] || continue
+  skip_worktree "$(local_name "$(basename "$mdir")")" && continue
   link_memory "${mdir%/}" "$CLAUDE_DIR/projects/$(local_name "$(basename "$mdir")")/memory"
 done
 

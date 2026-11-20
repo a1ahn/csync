@@ -443,6 +443,7 @@ nothing.
 |---|---|---|
 | `workspace_dir` | `.csync` | the directory csync creates inside each project. ⚠️ **Stops being settable the moment any project is connected** — it is then a rename in every project on every machine, which is a migration to propose, not a value to write |
 | `auto_title` | `off` | may `open` rename the session |
+| `worktree_dir` | *(empty)* | the directory beside each main checkout that holds its worktrees; `install.sh` does not check memory links under it |
 
 That table is here so a session can **point at the command** — "that is
 `/csync config auto_title on`" — without loading anything. Suggest it; do not run
